@@ -40,7 +40,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.SMALLINT(6),
         allowNull: false,
         defaultValue: 0,
-      },
+      }
     },
     {
       timestamps: false,
@@ -59,6 +59,7 @@ module.exports = (sequelize, DataTypes) => {
       as: 'attributes',
       foreignKey: 'product_id',
     });
+
   };
 
   return Product;

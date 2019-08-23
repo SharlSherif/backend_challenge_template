@@ -6,29 +6,45 @@
  *  NB: Check the BACKEND CHALLENGE TEMPLATE DOCUMENTATION in the readme of this repository to see our recommended
  *  endpoints, request body/param, and response object for each of these method
  */
+import { Tax } from '../database/models'
+
 class TaxController {
   /**
    * This method get all taxes
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and tax details
+   * @memberof TaxController
    */
   static async getAllTax(req, res, next) {
-    // write code to get all tax from the database here
-    return res.status(200).json({ message: 'this works' });
+
+    try {
+      const tax = await Tax.findAll();
+      return res.status(200).json(tax)
+    } catch (error) {
+      next(error)
+    }
   }
 
   /**
-   * This method gets a single tax using the tax id
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and tax details
+   * @memberof TaxController
    */
   static async getSingleTax(req, res, next) {
-    
-    // Write code to get a single tax using the tax Id provided in the request param
-    return res.status(200).json({ message: 'this works' });
+    const { tax_id } = req.params;
+    const tax = await Tax.findByPk(tax_id)
+    if(tax !== null) {
+      return res.status(200).json(tax)
+    }
+    next(error)
   }
+
 }
 
 export default TaxController;

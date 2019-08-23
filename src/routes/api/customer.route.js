@@ -1,25 +1,29 @@
 import { Router } from 'express';
 import CustomerController from '../../controllers/customer.controller';
+import authentication from '../middlewares/authentication'
 
 // These are valid routes but they may contain a bug, please try to define and fix them
 
 const router = Router();
 router.post(
   '/customers',
-  CustomerController.updateCreditCard
+  CustomerController.create
 );
 router.post('/customers/login',  CustomerController.login);
-router.get('/customer', CustomerController.getCustomerProfile);
+router.get('/customer/:id', authentication, CustomerController.getCustomerProfile);
 router.put(
-  '/customer',
-  CustomerController.apply
+  '/customer/:id',
+  authentication,
+  CustomerController.updateCustomerProfile
 );
 router.put(
-  '/customer/address',
+  '/customer/address/:id',
+  authentication,
   CustomerController.updateCustomerAddress
 );
 router.put(
-  '/customer/creditCard',
+  '/customer/creditCard/:id',
+  authentication,
   CustomerController.updateCreditCard
 );
 

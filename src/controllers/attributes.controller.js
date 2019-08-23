@@ -10,50 +10,113 @@
  * NB: Check the BACKEND CHALLENGE TEMPLATE DOCUMENTATION in the readme of this repository to see our recommended
  *  endpoints, request body/param, and response object for each of these method
  */
+
+import { Attribute, AttributeValue, ProductAttribute } from '../database/models'
+
 class AttributeController {
   /**
    * This method get all attributes
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and attribute details
+   * @memberof AttributeController
    */
   static async getAllAttributes(req, res, next) {
-    // write code to get all attributes from the database here
-    return res.status(200).json({ message: 'this works' });
+    try {
+      const Attributes = await Attribute.findAll();
+      return res.status(200).json(Attributes);
+    } catch (error) {
+      next(error)
+    }
   }
 
   /**
    * This method gets a single attribute using the attribute id
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and attribute details
+   * @memberof AttributeController
    */
   static async getSingleAttribute(req, res, next) {
-    // Write code to get a single attribute using the attribute id provided in the request param
-    return res.status(200).json({ message: 'this works' });
+    const { attribute_id } = req.params;
+    const attribute = await Attribute.findByPk(attribute_id)
+    if (attribute !== null) {
+      return res.status(200).json(attribute)
+    }
+    next('attribute not found')
   }
 
   /**
    * This method gets a list attribute values in an attribute using the attribute id
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and attribute details
+   * @memberof AttributeController
    */
   static async getAttributeValues(req, res, next) {
-    // Write code to get all attribute values for an attribute using the attribute id provided in the request param
-    // This function takes the param: attribute_id
-    return res.status(200).json({ message: 'this works' });
+    const { attribute_id } = req.params;
+    const attribute_values = await AttributeValue.findAll({
+      attributes:['attribute_value_id', 'value'],
+      where: {
+        attribute_id
+      }
+    })
+
+    if (attribute_values.length > 0) {
+      res.status(200).json(attribute_values)
+    }
+
+    next('attribute_values not found')
   }
 
   /**
    * This method gets a list attribute values in a product using the product id
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and attribute details
+   * @memberof AttributeController
    */
   static async getProductAttributes(req, res, next) {
-    // Write code to get all attribute values for a product using the product id provided in the request param
-    return res.status(200).json({ message: 'this works' });
+    const { product_id } = req.params;
+    // find the attribute based on product_id, then populate to get the attributeValue then inside that populate again to get the attribute_name.
+    // this is how the relation is built
+    let attributes = await ProductAttribute.findAll({
+      include: [{
+        model: AttributeValue,
+        include: [{
+          model: Attribute,
+          as: 'attribute_type',
+          attributes: ['name']
+        }]
+      }],
+      where: {
+        product_id
+      }
+    })
+
+    if (attributes.length > 0) {
+      // restructure the array to make it fit the requirements
+      attributes = attributes.map((attribute) => {
+        const { attribute_value_id, AttributeValue } = attribute;
+        const { attribute_type } = AttributeValue
+        return {
+          attribute_name: attribute_type.name,
+          attribute_value_id,
+          attribute_value: AttributeValue.value
+        }
+      })
+
+      return res.status(200).json(attributes)
+    }
+    next('attributes not found')
   }
 }
 

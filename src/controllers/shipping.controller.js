@@ -48,8 +48,12 @@ class ShippingController {
           shipping_region_id,
         },
       });
+      
+      if(shippingTypes.length < 1) {
+        return next('no shipping types were found');
+      }
 
-      return res.status(200).json({
+      res.status(200).json({
         shippingTypes,
       });
     } catch (error) {

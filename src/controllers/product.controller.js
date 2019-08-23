@@ -23,10 +23,11 @@ import {
   AttributeValue,
   Attribute,
   Category,
-  Sequelize,
+  Customer,
+  sequelize,
+  Review
 } from '../database/models';
-
-const { Op } = Sequelize;
+import { sqlQueryMap } from '../helpers/query';
 
 /**
  *
@@ -47,12 +48,13 @@ class ProductController {
   static async getAllProducts(req, res, next) {
     const { query } = req;
     const { page, limit, offset } = query
-    const sqlQueryMap = {
-      limit,
-      offset,
-    };
+    /*
+      they have to be numbers in order to fit in the mysql query syntax
+      'OR undefined' is there to ensure that not passing a certain value, should still return a valid result 
+    */
+
     try {
-      const products = await Product.findAndCountAll(sqlQueryMap);
+      const products = await Product.findAndCountAll(sqlQueryMap({ limit, offset, page }));
       return res.status(200).json({
         status: true,
         products,
@@ -73,10 +75,24 @@ class ProductController {
    * @memberof ProductController
    */
   static async searchProduct(req, res, next) {
-    const { query_string, all_words } = req.query;  // eslint-disable-line
-    // all_words should either be on or off
-    // implement code to search product
-    return res.status(200).json({ message: 'this works' });
+    const { query_string, all_words, page = 1, limit = 20, description_length = 200 } = req.query;  // eslint-disable-line
+
+    await sequelize.query('CALL catalog_search(:query_string, :all_words, :description_length, :page, :limit)', {
+
+      replacements: {
+        query_string,
+        all_words,
+        description_length,
+        page,
+        limit
+      }
+    }).then(products => {
+      return res.status(200).json({
+        rows: products,
+      });
+    }).catch(error => {
+      next(error);
+    })
   }
 
   /**
@@ -92,21 +108,26 @@ class ProductController {
   static async getProductsByCategory(req, res, next) {
 
     try {
-      const { category_id } = req.params; // eslint-disable-line
+      const { query, params } = req; // eslint-disable-line
+      const { category_id } = params; // eslint-disable-line
+      const { limit, offset } = query
+      /*
+        they have to be numbers in order to fit in the mysql query syntax
+        'OR undefined' is there to ensure that not passing a certain value, should still return a valid result 
+      */
       const products = await Product.findAndCountAll({
         include: [
           {
-            model: Department,
+            model: Category,
             where: {
               category_id,
             },
             attributes: [],
           },
         ],
-        limit,
-        offset,
+        ...sqlQueryMap({ limit, offset })
       });
-      return next(products);
+      return res.status(200).json(products);
     } catch (error) {
       return next(error);
     }
@@ -119,11 +140,52 @@ class ProductController {
    * @param {object} req express request object
    * @param {object} res express response object
    * @param {object} next next middleware
+   * @param {string} department_id department id
    * @returns {json} json object with status and product data
    * @memberof ProductController
    */
   static async getProductsByDepartment(req, res, next) {
-    // implement the method to get products by department
+    const { department_id } = req.params;
+    const { page, limit, description_length } = req.query;
+    const allProducts = [];
+    let count = 0;
+    // get all the categories associated with that department_id
+    const categories = await Category.findAll({
+      include: [
+        {
+          model: Department,
+          where: {
+            department_id,
+          },
+          attributes: [],
+        },
+      ],
+      ...sqlQueryMap({ page, limit, description_length })
+    })
+    // loop on each category id and get the products associated with its id 
+    for (let { category_id } of categories) {
+      const products = await Product.findAndCountAll({
+        include: [
+          {
+            model: Category,
+            where: {
+              category_id,
+            },
+            attributes: [],
+          },
+        ],
+      });
+      // one field counting all the products
+      count += products.count
+      // push each product list to an array to form a large list of all available products
+      allProducts.push(products.rows)
+    }
+
+    if (allProducts.length > 0) {
+      res.status(200).json({ count, rows: allProducts })
+    } else {
+      next('no products were found')
+    }
   }
 
   /**
@@ -139,29 +201,98 @@ class ProductController {
   static async getProduct(req, res, next) {
 
     const { product_id } = req.params;  // eslint-disable-line
-    try {
-      const product = await Product.findByPk(product_id, {
-        include: [
-          {
-            model: AttributeValue,
-            as: 'attributes',
-            attributes: ['value'],
-            through: {
-              attributes: [],
-            },
-            include: [
-              {
-                model: Attribute,
-                as: 'attribute_type',
-              },
-            ],
-          },
-        ],
-      });
-      return res.status(500).json({ message: 'This works!!1' });
-    } catch (error) {
-      return next(error);
+    const product = await Product.findByPk(product_id);
+
+    if (product !== null) {
+      return res.status(200).json(product);
     }
+    next('product not found');
+  }
+
+  /**
+   * get product reviews
+   *
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and product reviews
+   * @memberof ProductController
+   */
+  static async getProductReviews(req, res, next) {
+    const { product_id } = req.params;  // eslint-disable-line
+
+    await sequelize.query('CALL catalog_get_product_reviews(:product_id)', {
+      replacements: {
+        product_id
+      }
+    }).then(reviews => {
+      return res.status(200).json(reviews);
+    }).catch(error => {
+      next(error);
+    })
+  }
+
+  /**
+   * post product reviews
+   *
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and product posted review
+   * @memberof ProductController
+   */
+  static async postProductReviews(req, res, next) {
+    const { product_id } = req.params;  // eslint-disable-line
+    const { review, rating } = req.body;  // eslint-disable-line
+    const {customer_id} = req.customer;
+    // get all the reviews this customer has created for that product before
+    // if any is found, then he's not allowed to review again
+    const previousCustomerReview = await Review.findAll({
+      where: {
+        customer_id,
+        product_id
+      }
+    })
+
+    if(previousCustomerReview.length > 0) return next('you have already reviewed this product')
+
+    try {
+      const reviewDetails = await Review.create({
+        customer_id,
+        product_id,
+        review,
+        rating
+      })
+
+      return res.status(201).json(reviewDetails)
+    }
+    catch( error ) {
+      next(error)
+    }
+  }
+
+
+  /**
+   * the category of a particular product.
+   *
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and the product category
+   * @memberof ProductController
+   */
+  static async getProductCategory(req, res, next) {
+
+    const { product_id } = req.params;  // eslint-disable-line
+    const product = await Product.findByPk(product_id);
+
+    if (product !== null) {
+      return res.status(200).json(product);
+    }
+    next('product not found');
   }
 
   /**
@@ -185,9 +316,13 @@ class ProductController {
 
   /**
    * Get a single department
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * 
+   * @static
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and a single department
+   * @memberof ProductController
    */
   static async getDepartment(req, res, next) {
     const { department_id } = req.params; // eslint-disable-line
@@ -196,12 +331,7 @@ class ProductController {
       if (department) {
         return res.status(200).json(department);
       }
-      return res.status(404).json({
-        error: {
-          status: 404,
-          message: `Department with id ${department_id} does not exist`,  // eslint-disable-line
-        }
-      });
+      return next(`Department with id ${department_id} does not exist`)
     } catch (error) {
       return next(error);
     }
@@ -209,37 +339,68 @@ class ProductController {
 
   /**
    * This method should get all categories
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * 
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and a category list
+   * @memberof ProductController
    */
   static async getAllCategories(req, res, next) {
-    // Implement code to get all categories here
-    return res.status(200).json({ message: 'this works' });
+    try {
+      const categories = await Category.findAll();
+
+      return res.status(200).send({ rows: categories })
+    } catch (error) {
+      next(error)
+    }
   }
 
   /**
    * This method should get a single category using the categoryId
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * 
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and a single category
+   * @memberof ProductController
    */
   static async getSingleCategory(req, res, next) {
     const { category_id } = req.params;  // eslint-disable-line
-    // implement code to get a single category here
-    return res.status(200).json({ message: 'this works' });
+    const category = await Category.findByPk(category_id)
+
+    if (category !== null) {
+      return res.status(200).json(category);
+    }
+    next('category was not found')
   }
 
   /**
    * This method should get list of categories in a department
-   * @param {*} req
-   * @param {*} res
-   * @param {*} next
+   * 
+   * @param {object} req express request object
+   * @param {object} res express response object
+   * @param {object} next next middleware
+   * @returns {json} json object with status and a depratment list
+   * @memberof ProductController
    */
   static async getDepartmentCategories(req, res, next) {
     const { department_id } = req.params;  // eslint-disable-line
+    const categories = await Category.findAll({
+      include: [
+        {
+          model: Department,
+          where: {
+            department_id,
+          },
+          attributes: [],
+        },
+      ],
+    })
+
+
     // implement code to get categories in a department here
-    return res.status(200).json({ message: 'this works' });
+    return res.status(200).json(categories);
   }
 }
 

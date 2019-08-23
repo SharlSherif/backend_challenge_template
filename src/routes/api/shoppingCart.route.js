@@ -10,12 +10,16 @@ router.delete('/shoppingcart/empty/:cart_id', ShoppingCartController.emptyCart);
 router.delete('/shoppingcart/removeProduct/:item_id', ShoppingCartController.removeItemFromCart);
 router.post('/orders', ShoppingCartController.createOrder);
 router.get(
-  '/orders/inCustomer',
+  '/orders/inCustomer/:customer_id',
   ShoppingCartController.getCustomerOrders
 );
 router.get(
   '/orders/:order_id',
   ShoppingCartController.getOrderSummary
+);
+router.get(
+  '/orders/shortDetail/:order_id',
+  ShoppingCartController.getOrderShortDetails
 );
 router.post(
   '/stripe/charge',

@@ -25,8 +25,8 @@ module.exports = (sequelize, DataTypes) => {
           isEmail: true,
         },
       },
-      password: {
-        type: DataTypes.STRING(100),
+      password: { // 100 was too short for a password. so thats changed.
+        type: DataTypes.STRING(350),
         allowNull: false,
         validate: {
           notEmpty: true,
@@ -65,8 +65,8 @@ module.exports = (sequelize, DataTypes) => {
     return bcrypt.hash(this.password, saltRounds);
   };
 
-  Customer.prototype.validatePassword = async function validatePassword(password) {
-    return bcrypt.compare(password, this.password);
+  Customer.prototype.validatePassword = async function validatePassword(enteredPassword, actualPassword) {
+    return bcrypt.compare(enteredPassword, actualPassword);
   };
 
   Customer.prototype.getSafeDataValues = function getSafeDataValues() {
