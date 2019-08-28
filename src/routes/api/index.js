@@ -12,8 +12,8 @@ const routes = Router();
 
 routes.use('/', welcomeRoute);
 routes.use('/', customerRoute);
+routes.use('/', shoppingCartRoute);
 routes.use('/', authentication, productRoute);
-routes.use('/', authentication, shoppingCartRoute);
 routes.use('/', authentication, shippingRoute);
 routes.use('/', authentication, taxRoute);
 routes.use('/', authentication, attributeRoute);

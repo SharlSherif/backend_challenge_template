@@ -22,7 +22,6 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-
 // compression and header security middleware
 app.use(compression());
 app.use(helmet());
@@ -49,6 +48,7 @@ app.use(
 );
 
 app.use('/stripe/charge', express.static(`${__dirname}/public`));
+app.use('/facebook/login', express.static(`${__dirname}/public/facebooklogin.html`));
 
 app.use(router);
 
@@ -64,10 +64,8 @@ if (!isProduction) {
     app.use((err, req, res, next) => {
         log(err.stack);
         res.status(err.status || 500).json({
-            error: {
-                message: err.message,
-                error: err,
-            },
+            error: err,
+            message: err.message,
             status: false,
         });
     });
